@@ -1,6 +1,7 @@
 const express = require("express");
 const db = require("../db");
 const ExpressError = require("../expressError");
+const slugify = require("slugify");
 
 let router = new express.Router();
 
@@ -23,11 +24,14 @@ router.get('/:code', async (req, res, next) => {
         let { code } = req.params;
         const c_results = await db.query(`SELECT code, name, description FROM companies WHERE code = $1`, [code]);
         const i_results = await db.query(`SELECT id FROM invoices WHERE comp_code = $1`, [code]);
+        const ind_results = await db.query(`SELECT i.name FROM industries AS i LEFT JOIN companies_industries AS ic ON i.code = ic.industries_code LEFT JOIN companies as c ON c.code = ic.companies_code WHERE c.code = $1`, [code]);
+        
         if(c_results.rows[0].length === 0)
             throw new ExpressError(`Company with code ${code} was not found`, 404);
 
         const company = c_results.rows[0];
         company.invoices = i_results.rows.map(i => i.id);
+        company.industries = ind_results.rows.map(i => i.name);
         return res.json({"company": company});
     } catch(err) {
         return next(err);
@@ -40,7 +44,8 @@ Needs to be given JSON like: {code, name, description}
 Returns obj of new company: {company: {code, name, description}}*/
 router.post('/', async (req, res, next) => {
     try {
-        const {code, name, description} = req.body;
+        const {name, description} = req.body;
+        const code = slugify(name, {lower:true});
         const results = await db.query(`INSERT INTO companies (code, name, description) VALUES ($1, $2, $3) 
                                         RETURNING code, name, description`, [code, name, description]);
         return res.status(201).json(results.rows[0]);
