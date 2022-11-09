@@ -20,10 +20,17 @@ Return obj of company: {company: {code, name, description}}
 If the company given cannot be found, this should return a 404 status response.*/
 router.get('/:code', async (req, res, next) => {
     try {
-        const results = await db.query(`SELECT code, name, description FROM companies WHERE code = $1`, [req.params.code]);
-        return res.json(results.rows[0]);
+        let { code } = req.params;
+        const c_results = await db.query(`SELECT code, name, description FROM companies WHERE code = $1`, [code]);
+        const i_results = await db.query(`SELECT id FROM invoices WHERE comp_code = $1`, [code]);
+        if(c_results.rows[0].length === 0)
+            throw new ExpressError(`Company with code ${code} was not found`, 404);
+
+        const company = c_results.rows[0];
+        company.invoices = i_results.rows.map(i => i.id);
+        return res.json({"company": company});
     } catch(err) {
-        return next(new ExpressError(`Company with code ${req.params.code} was not found`, 404));
+        return next(err);
     }
 });
 
@@ -47,15 +54,18 @@ Edit existing company.
 Should return 404 if company cannot be found.
 Needs to be given JSON like: {name, description}
 Returns update company object: {company: {code, name, description}}*/
-router.patch('/:code', async (req, res, next) => {
+router.put('/:code', async (req, res, next) => {
     try {
         const { code } = req.params;
         const {name, description} = req.body;
         const results = await db.query(`UPDATE companies SET name=$2 description=$3 WHERE code=$1 
                                         RETURNING code, name, description`, [code, name, description]);
-        return res.json(results.rows[0]);
+        if(results.rows[0].length === 0)
+            throw new ExpressError(`Company with code ${code} was not found`, 404);
+        else 
+            return res.json(results.rows[0]);
     } catch(err) {
-        return next(next(new ExpressError(`Company with code ${code} was not found`, 404)));
+        return next(err);
     }
 });
 
@@ -70,7 +80,7 @@ router.delete('/:code', async (req, res, next) => {
         await db.query(`DELETE FROM companies WHERE code=$1`, [code]);
         return res.json({status: `deleted`});
     } catch(err) {
-        return next(next(new ExpressError(`Company with code ${code} was not found`, 404)));
+        return next(err);
     }
 });
 
